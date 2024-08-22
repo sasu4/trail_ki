@@ -8,6 +8,7 @@ router.post('/', async (request, response) => {
     try {
         const { name, points } = request.body;
         const newTrail = new Trail({name, points});
+        //console.log('points in route: ', points);
         await newTrail.save();
         return response.status(201).send(newTrail);
     } catch(error) {

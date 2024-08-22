@@ -2,7 +2,10 @@ import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import BackButton from '../../components/BackButton';
 import Spinner from '../../components/Spinner';
+import PointModal from '../../components/PointModal';
 import { useNavigate } from 'react-router-dom';
+import {MdOutlineDelete} from 'react-icons/md';
+import {AiOutlineEdit} from 'react-icons/ai';
 
 // openlayers components
 import 'ol/ol.css';
@@ -23,9 +26,15 @@ const CreateTrail = () => {
     const [points, setPoints] = useState([]);
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
+    const [modalOpen, setModalOpen] = useState(false);
+    const [modalKey, setModalKey] = useState(0); // re-rendering the modal
+    const [tempPoint, setTempPoint] = useState(null);
     const mapRef = useRef(null);
     const vectorSourceRef = useRef(new VectorSource());  // Reference for the vector source (points & lines)
     const navigate = useNavigate();
+    const [editMode, setEditMode] = useState(false); // because of the possibility to edit already created point
+    const [currentPoint, setCurrentPoint] = useState(null);
+
     const handleSaveTrail = () => {
         const data = {
             name,
@@ -74,61 +83,125 @@ const CreateTrail = () => {
             const coordinates = evt.coordinate;  
             const lonLat = toLonLat(coordinates);  
 
-            // ask the user for the point title
-            const title = prompt('Enter the title for this point:');
-            if (title) {
-                const point = {
-                    title: title,
-                    longitude: lonLat[0],  
-                    latitude: lonLat[1]    
-                };
-
-                setPoints(prevPoints => [...prevPoints, point]);
-
-                // create a point feature and add to the map
-                const pointFeature = new Feature({
-                    geometry: new Point(coordinates),
-                });
-
-                pointFeature.setStyle(
-                    new Style({
-                        image: new CircleStyle({
-                            radius: 6,
-                            fill: new Fill({ color: 'blue' }),
-                            stroke: new Stroke({
-                                color: 'white',
-                                width: 2,
-                            }),
-                        }),
-                    })
-                );
-                vectorSourceRef.current.addFeature(pointFeature);
-
-                // draw a line connecting points
-                if (points.length > 0) {
-                    const lineCoordinates = [...points.map(p => fromLonLat([p.longitude, p.latitude])), coordinates];
-                    const lineFeature = new Feature({
-                        geometry: new LineString(lineCoordinates),
-                    });
-
-                    lineFeature.setStyle(
-                        new Style({
-                            stroke: new Stroke({
-                                color: 'green',
-                                width: 2,
-                            }),
-                        })
-                    );
-                    vectorSourceRef.current.addFeature(lineFeature);
-                }
-            }
+            setTempPoint({ longitude: lonLat[0], latitude: lonLat[1], coordinates: coordinates, id: Date.now() });
+            setModalKey(modalKey => modalKey + 1);
+            setModalOpen(true);
         });
     }, []);  // empty array to ensure the map initializes only once
+
+    const handleEditPoint = (point) => {
+        setCurrentPoint(point);
+        setEditMode(true);
+        setModalOpen(true);
+    }
+
+    const removePoint = (pointId) => {
+        setPoints(points => {
+            const updatedPoints = points.filter(p => p.id !== pointId);
+            updateMapPoints(updatedPoints);
+            return updatedPoints;
+        });
+    }
+
+    const updateMapPoints = (points) => {
+        vectorSourceRef.current.clear();
+        points.forEach(point => {
+            const pointFeature = new Feature({
+                geometry: new Point(fromLonLat([point.longitude, point.latitude])),
+                id: point.id
+            });
+            pointFeature.setStyle(
+                new Style({
+                    image: new CircleStyle({
+                        radius: 6,
+                        fill: new Fill({ color: 'blue' }),
+                        stroke: new Stroke({
+                            color: 'white',
+                            width: 2,
+                        }),
+                    }),
+                })
+            );
+            vectorSourceRef.current.addFeature(pointFeature);
+        });
+        drawLine(points);
+    };
+
+    const drawLine = (points) => {
+        if (points.length > 1) {
+            const lineCoordinates = points.map(p => fromLonLat([p.longitude, p.latitude]));
+            const lineFeature = new Feature({
+                geometry: new LineString(lineCoordinates),
+            });
+
+            lineFeature.setStyle(
+                new Style({
+                    stroke: new Stroke({
+                        color: 'green',
+                        width: 2,
+                    }),
+                })
+            );
+            vectorSourceRef.current.addFeature(lineFeature);
+        }
+    };
+
+    const handleSavePoint = (data) => {
+        if (editMode) {
+            setPoints(points => points.map(p => p.id === currentPoint.id ? { ...p, ...data } : p));
+            updateMapPoints(points.map(p => p.id === currentPoint.id ? { ...p, ...data } : p));
+        } else {
+            const point = {...data, longitude: tempPoint.longitude, latitude: tempPoint.latitude, id: tempPoint.id};
+            setPoints(prevPoints => [...prevPoints, point]);
+            updateMapPoints([...points, point]);
+        }
+
+        // create a point feature and add to the map
+        /*const pointFeature = new Feature({
+            geometry: new Point(tempPoint.coordinates),
+        });
+
+        pointFeature.setStyle(
+            new Style({
+                image: new CircleStyle({
+                    radius: 6,
+                    fill: new Fill({ color: 'blue' }),
+                    stroke: new Stroke({
+                        color: 'white',
+                        width: 2,
+                    }),
+                }),
+            })
+        );
+        vectorSourceRef.current.addFeature(pointFeature);
+
+        // draw a line connecting points
+        if (points.length > 0) {
+            const lineCoordinates = [...points.map(p => fromLonLat([p.longitude, p.latitude])), tempPoint.coordinates];
+            const lineFeature = new Feature({
+                geometry: new LineString(lineCoordinates),
+            });
+
+            lineFeature.setStyle(
+                new Style({
+                    stroke: new Stroke({
+                        color: 'green',
+                        width: 2,
+                    }),
+                })
+            );
+            vectorSourceRef.current.addFeature(lineFeature);
+        }*/
+        setModalOpen(false);
+        setEditMode(false);
+        setCurrentPoint(null);
+    }
 
     return (
         <div className='p-4'>
             <BackButton></BackButton>
             <h1 className='text-3xl my-4'>Create Trail</h1>
+            <PointModal key={modalKey} isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSavePoint} editMode={editMode} pointData={currentPoint}></PointModal>
             { loading ? <Spinner /> : ''}
             <div className='flex flex-col'>
                 {/* Display success message */}
@@ -146,7 +219,17 @@ const CreateTrail = () => {
                     {/* Map container */}
                     <div ref={mapRef} className='w-full h-96 border-2 border-gray-300' />
                 </div>
-            
+                <div className='my-4'>
+                    <ul>
+                        {points.map(point => (
+                            <li key={point.id}>
+                                {point.title || 'New Point'} - {point.latitude}, {point.longitude}
+                                <button onClick={() => handleEditPoint(point)}><AiOutlineEdit className='text-yellow-600' /></button>
+                                <button onClick={() => removePoint(point.id)}><MdOutlineDelete className='text-red-600' /></button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
                 <button className='p-2 bg-sky-300 m-8' onClick={handleSaveTrail}>
                     Save
                 </button>

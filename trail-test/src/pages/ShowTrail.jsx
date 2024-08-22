@@ -3,6 +3,7 @@ import axios from 'axios';
 import {useParams} from 'react-router-dom';
 import BackButton from '../../components/BackButton';
 import Spinner from '../../components/Spinner';
+import PointModal from '../../components/PointModal';
 
 // openlayers components
 import 'ol/ol.css';
@@ -25,6 +26,8 @@ const ShowTrail = () => {
     const {id} = useParams();
     const mapRef = useRef(null); // reference map container
     const popupRef = useRef(null); // reference for popup overlay to show info on POI
+    const [modalOpen, setModalOpen] = useState(false);
+    const [currentPoint, setCurrentPoint] = useState(null);
 
     useEffect(() => {
         setLoading(true);
@@ -58,6 +61,7 @@ const ShowTrail = () => {
                 const feature = new Feature({
                     geometry: new Point(fromLonLat([point.longitude, point.latitude])),
                     title: point.title,
+                    point: point,
                 });
                 feature.setStyle(new Style({
                     image: new Icon({
@@ -99,12 +103,12 @@ const ShowTrail = () => {
             });
 
             // popup for info on POI
-            const popupOverlay = new Overlay({
+            /*const popupOverlay = new Overlay({
                 element: popupRef.current,
                 positioning: 'bottom-center',
                 stopEvent: false,
             });
-            map.addOverlay(popupOverlay);
+            map.addOverlay(popupOverlay);*/
 
             // click event to highlight POI
             map.on('click', function(evt){
@@ -112,6 +116,11 @@ const ShowTrail = () => {
                     return feature;
                 });
                 if(feature && feature.getGeometry() instanceof Point) {
+                    const pointData = feature.get('point');
+                    if (pointData) {
+                        setCurrentPoint(pointData); // Set the point data first
+                        setModalOpen(true); // Then open the modal
+                     }
                     feature.setStyle(new Style({
                         image: new CircleStyle({
                             radius: 8,
@@ -119,10 +128,10 @@ const ShowTrail = () => {
                             stroke: new Stroke({color: 'white', width: 2}),
                         }),
                     }));
-                    const coordinates = feature.getGeometry().getCoordinates();
-                    popupOverlay.setPosition(coordinates);
-                    const title = feature.get('title');
-                    popupRef.current.innerHTML = `<div class='bg-white p-2 rounded shadow-md'>${title}</div>`;
+                    //const coordinates = feature.getGeometry().getCoordinates();
+                    //popupOverlay.setPosition(coordinates);
+                    //const title = feature.get('title');
+                    //popupRef.current.innerHTML = `<div class='bg-white p-2 rounded shadow-md'>${title}</div>`;
                 }
             });
         }
@@ -132,6 +141,7 @@ const ShowTrail = () => {
         <div className='p-4'>
             <BackButton></BackButton>
             <h1 className='text-3xl my-4'>Show trail</h1>
+            <PointModal isOpen={modalOpen} onClose={() => setModalOpen(false)} editMode={false} pointData={currentPoint} quizMode={true}></PointModal>
             {loading ? (<Spinner></Spinner>) : trail ? (
                 <div className='flex flex-col border-2 border-sky-400 rounder-xl p-4'>
                     <div className='my-4'>
